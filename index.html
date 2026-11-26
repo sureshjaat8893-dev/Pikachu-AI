@@ -1,0 +1,135 @@
+
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pikachu AI</title>
+<style>
+body {
+  margin: 0;
+  background: #101827;
+  color: white;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+.container {
+  padding: 35px 20px;
+}
+h1 {
+  color: #ffdf35;
+  font-size: 36px;
+}
+.pikachu {
+  font-size: 100px;
+  margin: 30px;
+}
+.status {
+  color: #b8c5d9;
+  margin: 20px;
+}
+button {
+  background: #ffdf35;
+  color: #111827;
+  border: none;
+  border-radius: 30px;
+  padding: 17px 28px;
+  font-size: 18px;
+  font-weight: bold;
+  margin: 10px;
+}
+#answer {
+  background: #202d42;
+  padding: 20px;
+  border-radius: 15px;
+  margin-top: 25px;
+  min-height: 50px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>⚡ PIKACHU AI ⚡</h1>
+<div class="pikachu">⚡</div>
+<h2>नमस्ते सुरेश जी!</h2>
+<p class="status" id="status">मैं आपकी मदद के लिए तैयार हूँ।</p>
+<button onclick="listen()">🎤 बोलिए Pikachu</button>
+<div id="answer">आपका जवाब यहाँ दिखाई देगा।</div>
+</div>
+
+<script>
+function speak(text) {
+ document.getElementById("answer").innerText = text;
+ let speech = new SpeechSynthesisUtterance(text);
+ speech.lang = "hi-IN";
+ speech.rate = 0.9;
+ speechSynthesis.speak(speech);
+}
+
+function listen() {
+ const SpeechRecognition =
+ window.SpeechRecognition ||
+ window.webkitSpeechRecognition;
+
+ if (!SpeechRecognition) {
+  speak("आपका ब्राउज़र वॉइस रिकग्निशन सपोर्ट नहीं करता।");
+  return;
+ }
+
+ const recognition = new SpeechRecognition();
+ recognition.lang = "hi-IN";
+ recognition.interimResults = false;
+
+ document.getElementById("status").innerText =
+ "सुन रहा हूँ...";
+
+ recognition.onresult = function(event) {
+  let command = event.results[0][0].transcript;
+  document.getElementById("status").innerText =
+  "आपने कहा: " + command;
+
+  command = command.toLowerCase();
+
+  if (command.includes("नमस्ते") ||
+      command.includes("हेलो")) {
+   speak("नमस्ते सुरेश जी! मैं आपका Pikachu हूँ।");
+  }
+  else if (command.includes("समय") ||
+           command.includes("टाइम")) {
+   speak("अभी समय है " +
+   new Date().toLocaleTimeString("hi-IN"));
+  }
+  else if (command.includes("तारीख") ||
+           command.includes("डेट")) {
+   speak("आज की तारीख है " +
+   new Date().toLocaleDateString("hi-IN"));
+  }
+  else if (command.includes("यूट्यूब")) {
+   speak("यूट्यूब खोल रहा हूँ।");
+   window.open("https://www.youtube.com", "_blank");
+  }
+  else if (command.includes("गूगल")) {
+   speak("गूगल खोल रहा हूँ।");
+   window.open("https://www.google.com", "_blank");
+  }
+  else {
+   speak("मैंने सुना: " + command +
+   "। अभी मुझे यह कमांड समझ नहीं आई।");
+  }
+ };
+
+ recognition.onerror = function() {
+  document.getElementById("status").innerText =
+  "माइक्रोफोन की अनुमति जाँचें।";
+ };
+
+ recognition.onend = function() {
+  document.getElementById("status").innerText =
+  "मैं तैयार हूँ।";
+ };
+
+ recognition.start();
+}
+</script>
+</body>
+</html>
