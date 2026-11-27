@@ -1,51 +1,532 @@
-name: Build Pikachu Android APK
+
+name: Build Pikachu AI Android APK
+
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-    - uses: android-actions/setup-android@v4
-      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      - name: Create Android project
+
+      - name: Create Pikachu App
         run: |
-          mkdir -p app/src/main/assets app/src/main/java/com/pikachu/ai
-          cp index.html app/src/main/assets/index.html
-          echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }" > settings.gradle
-          echo "dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }; rootProject.name='Pikachu'; include ':app'" >> settings.gradle
-          echo "plugins { id 'com.android.application' version '8.6.1' apply false }" > build.gradle
-          cat > app/build.gradle <<'EOF'
-          plugins { id 'com.android.application' }
-          android { namespace 'com.pikachu.ai'; compileSdk 35
-            defaultConfig { applicationId 'com.pikachu.ai'; minSdk 23; targetSdk 28; versionCode 1; versionName '1.0' }
+          mkdir -p app/src/main/java/com/pikachu/ai
+          mkdir -p app/src/main/res/xml
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'Pikachu'
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.6.1' apply false
           }
           EOF
-          cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.RECORD_AUDIO"/><application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Pikachu" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.pikachu.ai'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.pikachu.ai'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
           EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+              <uses-permission android:name="android.permission.CALL_PHONE"/>
+              <uses-permission android:name="android.permission.READ_CONTACTS"/>
+
+              <uses-feature
+                  android:name="android.hardware.microphone"
+                  android:required="false"/>
+
+              <application
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:label="PIKACHU AI"
+                  android:allowBackup="false">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+
+                  </activity>
+
+                  <receiver
+                      android:name=".PikachuAdminReceiver"
+                      android:permission="android.permission.BIND_DEVICE_ADMIN"
+                      android:exported="true">
+
+                      <meta-data
+                          android:name="android.app.device_admin"
+                          android:resource="@xml/device_admin"/>
+
+                      <intent-filter>
+                          <action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/>
+                      </intent-filter>
+                  </receiver>
+
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/res/xml/device_admin.xml <<'EOF'
+          <device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-policies>
+                  <force-lock/>
+              </uses-policies>
+          </device-admin>
+          EOF
+
+          cat > app/src/main/java/com/pikachu/ai/PikachuAdminReceiver.java <<'EOF'
+          package com.pikachu.ai;
+
+          import android.app.admin.DeviceAdminReceiver;
+
+          public class PikachuAdminReceiver extends DeviceAdminReceiver {
+          }
+          EOF
+
           cat > app/src/main/java/com/pikachu/ai/MainActivity.java <<'EOF'
           package com.pikachu.ai;
-          import android.app.*; import android.os.*; import android.webkit.*;
+
+          import android.app.Activity;
+          import android.app.admin.DevicePolicyManager;
+          import android.content.ComponentName;
+          import android.content.Intent;
+          import android.content.pm.PackageManager;
+          import android.Manifest;
+          import android.database.Cursor;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.provider.ContactsContract;
+          import android.speech.RecognizerIntent;
+          import android.speech.SpeechRecognizer;
+          import android.speech.RecognitionListener;
+          import android.speech.tts.TextToSpeech;
+          import android.view.Gravity;
+          import android.widget.Button;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+          import android.widget.Toast;
+          import java.util.ArrayList;
+          import java.util.Locale;
+
           public class MainActivity extends Activity {
-            WebView web;
-            public void onCreate(Bundle b){super.onCreate(b); web=new WebView(this); web.getSettings().setJavaScriptEnabled(true); web.getSettings().setDomStorageEnabled(true); web.setWebChromeClient(new WebChromeClient(){public void onPermissionRequest(PermissionRequest r){runOnUiThread(()->r.grant(r.getResources()));}}); setContentView(web); web.loadUrl("file:///android_asset/index.html"); }
-            public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
+
+              private TextView status;
+              private TextToSpeech tts;
+              private SpeechRecognizer recognizer;
+              private String pendingCallName = "";
+
+              private DevicePolicyManager dpm;
+              private ComponentName admin;
+
+              private static final int PERMISSION_REQUEST = 101;
+              private static final int ADMIN_REQUEST = 102;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  dpm = (DevicePolicyManager)
+                      getSystemService(DEVICE_POLICY_SERVICE);
+
+                  admin = new ComponentName(
+                      this, PikachuAdminReceiver.class);
+
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.VERTICAL);
+                  layout.setGravity(Gravity.CENTER);
+                  layout.setPadding(30, 40, 30, 40);
+
+                  TextView heading = new TextView(this);
+                  heading.setText("⚡ PIKACHU AI ⚡");
+                  heading.setTextSize(30);
+                  heading.setGravity(Gravity.CENTER);
+
+                  status = new TextView(this);
+                  status.setText("नमस्ते! मैं Pikachu हूँ।");
+                  status.setTextSize(20);
+                  status.setGravity(Gravity.CENTER);
+                  status.setPadding(10, 40, 10, 40);
+
+                  Button speak = new Button(this);
+                  speak.setText("🎤 बोलो Pikachu");
+                  speak.setTextSize(20);
+                  speak.setOnClickListener(v -> startListening());
+
+                  layout.addView(heading);
+                  layout.addView(status);
+                  layout.addView(speak);
+
+                  setContentView(layout);
+
+                  tts = new TextToSpeech(this, result -> {
+                      if (result != TextToSpeech.ERROR) {
+                          tts.setLanguage(new Locale("hi", "IN"));
+                      }
+                  });
+
+                  if (SpeechRecognizer.isRecognitionAvailable(this)) {
+                      recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                      recognizer.setRecognitionListener(listener);
+                  }
+
+                  requestAppPermissions();
+                  say("नमस्ते! मैं पिकाचू हूँ। बोलने के लिए बटन दबाएँ।");
+              }
+
+              private void requestAppPermissions() {
+                  if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                          != PackageManager.PERMISSION_GRANTED
+                      || checkSelfPermission(Manifest.permission.CALL_PHONE)
+                          != PackageManager.PERMISSION_GRANTED
+                      || checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                          != PackageManager.PERMISSION_GRANTED) {
+
+                      requestPermissions(new String[] {
+                          Manifest.permission.RECORD_AUDIO,
+                          Manifest.permission.CALL_PHONE,
+                          Manifest.permission.READ_CONTACTS
+                      }, PERMISSION_REQUEST);
+                  }
+              }
+
+              private final RecognitionListener listener =
+                  new RecognitionListener() {
+
+                  @Override
+                  public void onReadyForSpeech(Bundle params) {
+                      status.setText("सुन रहा हूँ...");
+                  }
+
+                  @Override
+                  public void onBeginningOfSpeech() {}
+
+                  @Override
+                  public void onRmsChanged(float rmsdB) {}
+
+                  @Override
+                  public void onBufferReceived(byte[] buffer) {}
+
+                  @Override
+                  public void onEndOfSpeech() {
+                      status.setText("समझ रहा हूँ...");
+                  }
+
+                  @Override
+                  public void onError(int error) {
+                      say("माफ करना, मैं समझ नहीं पाया। फिर से बोलो।");
+                  }
+
+                  @Override
+                  public void onResults(Bundle results) {
+                      ArrayList<String> words =
+                          results.getStringArrayList(
+                              SpeechRecognizer.RESULTS_RECOGNITION);
+
+                      if (words != null && !words.isEmpty()) {
+                          String command = words.get(0).toLowerCase(
+                              new Locale("hi", "IN"));
+                          status.setText("आपने कहा: " + command);
+                          handleCommand(command);
+                      }
+                  }
+
+                  @Override
+                  public void onPartialResults(Bundle partialResults) {}
+
+                  @Override
+                  public void onEvent(int eventType, Bundle params) {}
+              };
+
+              private void startListening() {
+                  if (recognizer == null) {
+                      say("आपके फोन में वॉइस रिकॉग्निशन उपलब्ध नहीं है।");
+                      return;
+                  }
+
+                  if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                          != PackageManager.PERMISSION_GRANTED) {
+                      requestAppPermissions();
+                      return;
+                  }
+
+                  Intent intent = new Intent(
+                      RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+
+                  intent.putExtra(
+                      RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                      RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+
+                  intent.putExtra(
+                      RecognizerIntent.EXTRA_LANGUAGE, "hi-IN");
+
+                  intent.putExtra(
+                      RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN");
+
+                  intent.putExtra(
+                      RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+
+                  recognizer.startListening(intent);
+              }
+
+              private void handleCommand(String command) {
+
+                  if (command.contains("लॉक") ||
+                      command.contains("lock")) {
+                      lockPhone();
+                      return;
+                  }
+
+                  if (command.contains("यूट्यूब") ||
+                      command.contains("youtube")) {
+                      openApp("com.google.android.youtube",
+                          "https://www.youtube.com");
+                      return;
+                  }
+
+                  if (command.contains("व्हाट्सएप") ||
+                      command.contains("whatsapp")) {
+                      openApp("com.whatsapp",
+                          "https://www.whatsapp.com");
+                      return;
+                  }
+
+                  if (command.contains("समय") ||
+                      command.contains("टाइम") ||
+                      command.contains("time")) {
+                      String time = new java.text.SimpleDateFormat(
+                          "hh:mm a", Locale.getDefault())
+                          .format(new java.util.Date());
+                      say("अभी समय है " + time);
+                      return;
+                  }
+
+                  if (command.contains("सेटिंग") ||
+                      command.contains("settings")) {
+                      startActivity(new Intent(
+                          android.provider.Settings.ACTION_SETTINGS));
+                      say("सेटिंग खोल रहा हूँ।");
+                      return;
+                  }
+
+                  if (command.contains("कॉल") ||
+                      command.contains("call")) {
+                      String name = command
+                          .replace("पिकाचू", "")
+                          .replace("pikachu", "")
+                          .replace("को", "")
+                          .replace("कॉल", "")
+                          .replace("करो", "")
+                          .replace("लगाओ", "")
+                          .replace("call", "")
+                          .replace("karo", "")
+                          .replace("फोन", "")
+                          .trim();
+
+                      if (name.isEmpty()) {
+                          say("किसको कॉल करना है?");
+                      } else {
+                          callContact(name);
+                      }
+                      return;
+                  }
+
+                  say("यह कमांड अभी मुझे नहीं आती।");
+              }
+
+              private void lockPhone() {
+                  if (dpm.isAdminActive(admin)) {
+                      dpm.lockNow();
+                      return;
+                  }
+
+                  say("स्क्रीन लॉक करने के लिए एक बार अनुमति चालू करें।");
+
+                  Intent intent = new Intent(
+                      DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+
+                  intent.putExtra(
+                      DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin);
+
+                  intent.putExtra(
+                      DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                      "Pikachu को फोन लॉक करने की अनुमति दें।");
+
+                  startActivityForResult(intent, ADMIN_REQUEST);
+              }
+
+              private void callContact(String name) {
+                  if (checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                          != PackageManager.PERMISSION_GRANTED
+                      || checkSelfPermission(Manifest.permission.CALL_PHONE)
+                          != PackageManager.PERMISSION_GRANTED) {
+
+                      pendingCallName = name;
+                      requestAppPermissions();
+                      return;
+                  }
+
+                  Uri uri = Uri.withAppendedPath(
+                      ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI,
+                      Uri.encode(name));
+
+                  Cursor cursor = getContentResolver().query(
+                      uri,
+                      new String[] {
+                          ContactsContract.CommonDataKinds.Phone.NUMBER,
+                          ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                      },
+                      null, null, null);
+
+                  if (cursor != null) {
+                      try {
+                          if (cursor.moveToFirst()) {
+                              String number = cursor.getString(0);
+
+                              if (number != null && !number.isEmpty()) {
+                                  say(name + " को कॉल कर रहा हूँ।");
+
+                                  Intent call = new Intent(
+                                      Intent.ACTION_CALL,
+                                      Uri.parse("tel:" + number));
+
+                                  startActivity(call);
+                              }
+                          } else {
+                              say("यह नाम आपके कॉन्टैक्ट में नहीं मिला।");
+                          }
+                      } finally {
+                          cursor.close();
+                      }
+                  }
+              }
+
+              private void openApp(String packageName, String url) {
+                  Intent launch = getPackageManager()
+                      .getLaunchIntentForPackage(packageName);
+
+                  if (launch != null) {
+                      startActivity(launch);
+                  } else {
+                      startActivity(new Intent(
+                          Intent.ACTION_VIEW, Uri.parse(url)));
+                  }
+                  say("खोल रहा हूँ।");
+              }
+
+              private void say(String message) {
+                  status.setText(message);
+
+                  if (tts != null) {
+                      tts.speak(message,
+                          TextToSpeech.QUEUE_FLUSH, null, "pikachu");
+                  }
+              }
+
+              @Override
+              public void onRequestPermissionsResult(
+                  int requestCode, String[] permissions, int[] results) {
+
+                  super.onRequestPermissionsResult(
+                      requestCode, permissions, results);
+
+                  if (requestCode == PERMISSION_REQUEST) {
+                      if (!pendingCallName.isEmpty()
+                          && checkSelfPermission(Manifest.permission.CALL_PHONE)
+                              == PackageManager.PERMISSION_GRANTED
+                          && checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                              == PackageManager.PERMISSION_GRANTED) {
+
+                          String name = pendingCallName;
+                          pendingCallName = "";
+                          callContact(name);
+                      }
+                  }
+              }
+
+              @Override
+              protected void onDestroy() {
+                  if (recognizer != null) {
+                      recognizer.destroy();
+                  }
+
+                  if (tts != null) {
+                      tts.stop();
+                      tts.shutdown();
+                  }
+
+                  super.onDestroy();
+              }
           }
           EOF
+
       - name: Build APK
-        run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload Pikachu APK
+        uses: actions/upload-artifact@v4
         with:
-          name: Pikachu-APK
+          name: Pikachu-AI-APK
           path: app/build/outputs/apk/debug/app-debug.apk
+          
